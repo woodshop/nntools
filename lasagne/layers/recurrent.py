@@ -213,18 +213,19 @@ class CustomRecurrentLayer(Layer):
         # Get the input dimensionality and number of units based on the
         # expected output of the input-to-hidden layer
         self.num_inputs = np.prod(self.input_shape[2:])
-        self.num_units = input_to_hidden.output_shape[-1]
+        self.hid_shape = input_to_hidden.output_shape
 
         # Initialize hidden state
         if isinstance(hid_init, T.TensorVariable):
-            if hid_init.ndim != 2:
+            if hid_init.ndim != len(self.hid_shape):
                 raise ValueError(
                     "When hid_init is provided as a TensorVariable, it should "
-                    "have 2 dimensions and have shape (num_batch, num_units)")
+                    "have the same shape as input_to_hidden.output_shape and "
+                    "hidden_to_hidden.output_shape")
             self.hid_init = hid_init
         else:
             self.hid_init = self.add_param(
-                hid_init, (1, self.num_units), name="hid_init",
+                hid_init, (1,) + self.hid_shape[1:], name="hid_init",
                 trainable=learn_init, regularizable=False)
 
     def get_params(self, **tags):
@@ -261,29 +262,27 @@ class CustomRecurrentLayer(Layer):
             Symbolic output variable.
         """
 
-        # Treat all dimensions after the second as flattened feature dimensions
-        if input.ndim > 3:
-            input = input.reshape((input.shape[0], input.shape[1],
-                                   T.prod(input.shape[2:])))
-
         # Input should be provided as (n_batch, n_time_steps, n_features)
         # but scan requires the iterable dimension to be first
         # So, we need to dimshuffle to (n_time_steps, n_batch, n_features)
-        input = input.dimshuffle(1, 0, 2)
-        seq_len, num_batch, _ = input.shape
+        input = input.dimshuffle(1, 0, *range(2, input.ndim))
+        seq_len, num_batch = input.shape[0], input.shape[1]
 
         if self.precompute_input:
             # Because the input is given for all time steps, we can precompute
             # the inputs to hidden before scanning. First we need to reshape
-            # from (seq_len, batch_size, num_inputs) to
-            # (seq_len*batch_size, num_inputs)
-            input = T.reshape(input,
-                              (seq_len*num_batch, -1))
+            # from (seq_len, batch_size, trailing dimensions...) to
+            # (seq_len*batch_size, trailing dimensions...)
+            # This strange use of a generator in a tuple was because
+            # input.shape[2:] was raising a Theano error
+            trailing_dims = tuple(input.shape[n] for n in range(2, input.ndim))
+            input = T.reshape(input, (seq_len*num_batch,) + trailing_dims)
             input = helper.get_output(
                 self.input_to_hidden, input, **kwargs)
 
-            # Reshape back to (seq_len, batch_size, num_units)
-            input = T.reshape(input, (seq_len, num_batch, -1))
+            # Reshape back to (seq_len, batch_size, trailing dimensions...)
+            trailing_dims = tuple(input.shape[n] for n in range(1, input.ndim))
+            input = T.reshape(input, (seq_len, num_batch) + trailing_dims)
 
         # We will always pass the hidden-to-hidden layer params to step
         non_seqs = helper.get_all_params(self.hidden_to_hidden)
@@ -331,8 +330,13 @@ class CustomRecurrentLayer(Layer):
         if isinstance(self.hid_init, T.TensorVariable):
             hid_init = self.hid_init
         else:
-            # Dot against a 1s vector to repeat to shape (num_batch, num_units)
-            hid_init = T.dot(T.ones((num_batch, 1)), self.hid_init)
+            # The code below simply repeats self.hid_init num_batch times in
+            # its first dimension.  Turns out using a dot product and a
+            # dimshuffle is faster than T.repeat.
+            dot_dims = (range(1, self.hid_init.ndim - 1) +
+                        [0, self.hid_init.ndim - 1])
+            hid_init = T.dot(T.ones((num_batch, 1)),
+                             self.hid_init.dimshuffle(dot_dims))
 
         if self.unroll_scan:
             # Explicitly unroll the recurrence instead of using scan
@@ -356,11 +360,11 @@ class CustomRecurrentLayer(Layer):
                 strict=True)[0]
 
         # dimshuffle back to (n_batch, n_time_steps, n_features))
-        hid_out = hid_out.dimshuffle(1, 0, 2)
+        hid_out = hid_out.dimshuffle(1, 0, *range(2, hid_out.ndim))
 
         # if scan is backward reverse the output
         if self.backwards:
-            hid_out = hid_out[:, ::-1, :]
+            hid_out = hid_out[:, ::-1]
 
         self.hid_out = hid_out
         return hid_out
@@ -464,6 +468,9 @@ class RecurrentLayer(CustomRecurrentLayer):
         self.W_in_to_hid = in_to_hid.W
         self.W_hid_to_hid = hid_to_hid.W
         self.b = in_to_hid.b
+        # CustomRecurrentLayer uses self.hid_shape instead of num_units,
+        # so store num_units too for easy access
+        self.num_units = num_units
 
         # Just use the CustomRecurrentLayer with the DenseLayers we created
         super(RecurrentLayer, self).__init__(
