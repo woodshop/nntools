@@ -63,6 +63,8 @@ This gives a loss expression good for monitoring validation error.
 """
 
 import theano.tensor.nnet
+import theano.tensor as T
+import theano
 
 from lasagne.layers import get_output
 
@@ -152,6 +154,16 @@ def squared_error(a, b):
     """
     return (a - b)**2
 
+def complex_mse(pred, targ):
+    return T.real((0.5*(pred-targ)*(pred-targ).conj()).mean())
+
+def manual_grad(objective, pred, targ):
+    if objective == complex_mse:
+        return (pred-targ)/T.cast(pred.size, pred.dtype)
+    else:
+        NotImplementedError("Complex gradient form %r not implemented." %
+                            objective)
+    
 
 def aggregate(loss, weights=None, mode='mean'):
     """Aggregates an element- or item-wise loss to a scalar loss.

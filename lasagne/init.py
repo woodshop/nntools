@@ -56,12 +56,16 @@ class Normal(Initializer):
     mean : float
         Mean of initial parameters.
     """
-    def __init__(self, std=0.01, mean=0.0):
+    def __init__(self, std=0.01, mean=0.0, cplx=False):
         self.std = std
         self.mean = mean
-
+        self.cplx = cplx
+        
     def sample(self, shape):
-        return floatX(np.random.normal(self.mean, self.std, size=shape))
+        init = np.random.normal(self.mean, self.std, size=shape)
+        if self.cplx:
+            init = init + 1j*np.random.normal(self.mean, self.std, size=shape)
+        return floatX(init)
 
 
 class Uniform(Initializer):
@@ -81,7 +85,7 @@ class Uniform(Initializer):
     mean : float
         see std for description.
     """
-    def __init__(self, range=0.01, std=None, mean=0.0):
+    def __init__(self, range=0.01, std=None, mean=0.0, cplx=False):
         import warnings
         warnings.warn("The uniform initializer no longer uses Glorot et al.'s "
                       "approach to determine the bounds, but defaults to the "
@@ -99,10 +103,15 @@ class Uniform(Initializer):
                 a, b = -range, range  # range is a number
 
         self.range = (a, b)
+        self.cplx = cplx
 
     def sample(self, shape):
-        return floatX(np.random.uniform(
-            low=self.range[0], high=self.range[1], size=shape))
+        init = np.random.uniform(
+            low=self.range[0], high=self.range[1], size=shape)
+        if self.cplx:
+            init = init + 1j*np.random.uniform(
+                low=self.range[0], high=self.range[1], size=shape)
+        return floatX(init)
 
 
 class Glorot(Initializer):
@@ -152,13 +161,14 @@ class Glorot(Initializer):
     GlorotNormal  : Shortcut with Gaussian initializer.
     GlorotUniform : Shortcut with uniform initializer.
     """
-    def __init__(self, initializer, gain=1.0, c01b=False):
+    def __init__(self, initializer, gain=1.0, c01b=False, cplx=False):
         if gain == 'relu':
             gain = np.sqrt(2)
 
         self.initializer = initializer
         self.gain = gain
         self.c01b = c01b
+        self.cplx = cplx
 
     def sample(self, shape):
         if self.c01b:
@@ -177,7 +187,7 @@ class Glorot(Initializer):
             receptive_field_size = np.prod(shape[2:])
 
         std = self.gain * np.sqrt(2.0 / ((n1 + n2) * receptive_field_size))
-        return self.initializer(std=std).sample(shape)
+        return self.initializer(std=std,cplx=self.cplx).sample(shape)
 
 
 class GlorotNormal(Glorot):
@@ -185,8 +195,8 @@ class GlorotNormal(Glorot):
 
     See :class:`Glorot` for a description of the parameters.
     """
-    def __init__(self, gain=1.0, c01b=False):
-        super(GlorotNormal, self).__init__(Normal, gain, c01b)
+    def __init__(self, gain=1.0, c01b=False, cplx=False):
+        super(GlorotNormal, self).__init__(Normal, gain, c01b, cplx)
 
 
 class GlorotUniform(Glorot):
@@ -194,8 +204,8 @@ class GlorotUniform(Glorot):
 
     See :class:`Glorot` for a description of the parameters.
     """
-    def __init__(self, gain=1.0, c01b=False):
-        super(GlorotUniform, self).__init__(Uniform, gain, c01b)
+    def __init__(self, gain=1.0, c01b=False, cplx=False):
+        super(GlorotUniform, self).__init__(Uniform, gain, c01b, cplx)
 
 
 class He(Initializer):
@@ -230,13 +240,14 @@ class He(Initializer):
     HeNormal  : Shortcut with Gaussian initializer.
     HeUniform : Shortcut with uniform initializer.
     """
-    def __init__(self, initializer, gain=1.0, c01b=False):
+    def __init__(self, initializer, gain=1.0, c01b=False, cplx=False):
         if gain == 'relu':
             gain = np.sqrt(2)
 
         self.initializer = initializer
         self.gain = gain
         self.c01b = c01b
+        self.cplx = False
 
     def sample(self, shape):
         if self.c01b:
@@ -255,7 +266,7 @@ class He(Initializer):
                     "This initializer only works with shapes of length >= 2")
 
         std = self.gain * np.sqrt(1.0 / fan_in)
-        return self.initializer(std=std).sample(shape)
+        return self.initializer(std=std,cplx=self.cplx).sample(shape)
 
 
 class HeNormal(He):
@@ -263,8 +274,8 @@ class HeNormal(He):
 
     See :class:`He` for a description of the parameters.
     """
-    def __init__(self, gain=1.0, c01b=False):
-        super(HeNormal, self).__init__(Normal, gain, c01b)
+    def __init__(self, gain=1.0, c01b=False, cplx=False):
+        super(HeNormal, self).__init__(Normal, gain, c01b, cplx)
 
 
 class HeUniform(He):
@@ -272,8 +283,8 @@ class HeUniform(He):
 
     See :class:`He` for a description of the parameters.
     """
-    def __init__(self, gain=1.0, c01b=False):
-        super(HeUniform, self).__init__(Uniform, gain, c01b)
+    def __init__(self, gain=1.0, c01b=False, cplx=False):
+        super(HeUniform, self).__init__(Uniform, gain, c01b, cplx)
 
 
 class Constant(Initializer):
@@ -284,8 +295,11 @@ class Constant(Initializer):
      val : float
         Constant value for weights.
     """
-    def __init__(self, val=0.0):
+    def __init__(self, val=0.0, cplx=False):
         self.val = val
+        if cplx:
+            self.val = self.val + 0j
+        self.cplx = cplx
 
     def sample(self, shape):
         return floatX(np.ones(shape) * self.val)
@@ -302,9 +316,10 @@ class Sparse(Initializer):
     std : float
         Non-zero weights are sampled from N(0, std).
     """
-    def __init__(self, sparsity=0.1, std=0.01):
+    def __init__(self, sparsity=0.1, std=0.01, cplx=False):
         self.sparsity = sparsity
         self.std = std
+        self.cplx = cplx
 
     def sample(self, shape):
         if len(shape) != 2:
@@ -319,7 +334,10 @@ class Sparse(Initializer):
             indices = np.arange(n_inputs)
             np.random.shuffle(indices)
             indices = indices[:size]
-            values = floatX(np.random.normal(0.0, self.std, size=size))
+            values = np.random.normal(0.0, self.std, size=size)
+            if self.cplx:
+                values = values + 1j*np.random.normal(0.0, self.std, size=size)
+            values = floatX(values)
             w[indices, k] = values
 
         return w
@@ -338,11 +356,12 @@ class Orthogonal(Initializer):
     gain : float or 'relu'
         'relu' gives gain of sqrt(2).
     """
-    def __init__(self, gain=1.0):
+    def __init__(self, gain=1.0, cplx=False):
         if gain == 'relu':
             gain = np.sqrt(2)
 
         self.gain = gain
+        self.cplx = cplx
 
     def sample(self, shape):
         if len(shape) < 2:
@@ -351,6 +370,8 @@ class Orthogonal(Initializer):
 
         flat_shape = (shape[0], np.prod(shape[1:]))
         a = np.random.normal(0.0, 1.0, flat_shape)
+        if self.cplx:
+            a = a + 1j*np.random.normal(0.0, 1.0, flat_shape)
         u, _, v = np.linalg.svd(a, full_matrices=False)
         # pick the one with the correct shape
         q = u if u.shape == flat_shape else v

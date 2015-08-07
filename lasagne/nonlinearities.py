@@ -3,7 +3,7 @@ Non-linear activation functions for artificial neurons.
 """
 
 import theano.tensor.nnet
-
+import theano.tensor as T
 
 # sigmoid
 def sigmoid(x):
@@ -183,3 +183,12 @@ def linear(x):
     return x
 
 identity = linear
+
+def manual_grad(nonlinearity, t_state):
+    if nonlinearity == tanh:
+        return (1-T.tanh(t_state)**2).conj()
+    elif nonlinearity == linear:
+        return 1.0
+    else:
+        raise ValueError(("%r is not supported for complex nets.") %
+                         (nonlinearity))

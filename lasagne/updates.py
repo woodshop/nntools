@@ -109,6 +109,8 @@ def get_or_compute_grads(loss_or_grads, params):
     else:
         return theano.grad(loss_or_grads, params)
 
+def manual_grad(network):
+    pass
 
 def sgd(loss_or_grads, params, learning_rate):
     """Stochastic Gradient Descent (SGD) updates

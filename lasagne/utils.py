@@ -18,7 +18,18 @@ def floatX(arr):
         The input array in the ``floatX`` dtype configured for Theano.
         If `arr` is an ndarray of correct dtype, it is returned as is.
     """
-    return np.asarray(arr, dtype=theano.config.floatX)
+    if np.iscomplexobj(arr):
+        if theano.config.floatX == 'float32':
+            dtype = 'complex64'
+        elif theano.config.floatX == 'float64':
+            dtype = 'complex128'
+        else:
+            raise TypeError("Half precision complex values not supported. "+
+                            "Please change theano.config.floatX to single "+
+                            "or double precision.")
+    else:
+        dtype = theano.config.floatX
+    return np.asarray(arr, dtype=dtype)
 
 
 def shared_empty(dim=2, dtype=None):

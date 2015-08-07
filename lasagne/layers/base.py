@@ -20,7 +20,7 @@ class Layer(object):
     network's output :class:`Layer` instance can double as a handle to the full
     network.
     """
-    def __init__(self, incoming, name=None):
+    def __init__(self, incoming, name=None, cplx=False):
         """
         Instantiates the layer.
 
@@ -46,6 +46,7 @@ class Layer(object):
                 "Cannot create Layer with a non-positive input_shape "
                 "dimension. input_shape=%r, self.name=%r") % (
                     self.input_shape, self.name))
+        self.cplx = cplx
 
     @property
     def output_shape(self):
@@ -248,7 +249,9 @@ class Layer(object):
                       stacklevel=2)
         return self.get_params(regularizable=False)
 
-
+    def manual_grad(self, grad_from_above):
+        raise NotImplementedError
+    
 class MergeLayer(Layer):
     """
     This class represents a layer that aggregates input from multiple layers.
@@ -306,7 +309,7 @@ class MergeLayer(Layer):
         """
         raise NotImplementedError
 
-    def get_output_for(self, inputs, **kwargs):
+    def get_output_for(self, inputs, save_states=False, **kwargs):
         """
         Propagates the given inputs through this layer (and only this layer).
 

@@ -6,6 +6,7 @@ from .. import nonlinearities
 
 from .base import Layer
 
+from collections import OrderedDict
 
 __all__ = [
     "DenseLayer",
@@ -79,16 +80,33 @@ class DenseLayer(Layer):
     def get_output_shape_for(self, input_shape):
         return (input_shape[0], self.num_units)
 
-    def get_output_for(self, input, **kwargs):
+    def get_output_for(self, input, save_states=False, **kwargs):
         if input.ndim > 2:
             # if the input has more than two dimensions, flatten it into a
             # batch of feature vectors.
             input = input.flatten(2)
 
-        activation = T.dot(input, self.W)
+        transform = T.dot(input, self.W)
         if self.b is not None:
-            activation = activation + self.b.dimshuffle('x', 0)
-        return self.nonlinearity(activation)
+            transform = transform + self.b.dimshuffle('x', 0)
+        if save_states:
+            self.i_state = input
+            self.t_state = transform
+        else:
+            self.i_state = None
+            self.t_state = None
+        return self.nonlinearity(transform)
+
+    def manual_grad(self, grad):
+#        import pdb; pdb.set_trace()
+        updates = OrderedDict()
+        grad = grad * nonlinearities.manual_grad(self.nonlinearity,
+                                                 self.t_state)
+        updates[self.W] = T.dot(self.i_state.T.conj(), grad)
+#        updates[self.b] = T.sum(grad, axis=0, acc_dtype=self.b.dtype)
+        updates[self.b] = T.sum(grad, axis=0)
+        grad = T.dot(grad, self.W.T.conj())
+        return updates,grad
 
 
 class NonlinearityLayer(Layer):

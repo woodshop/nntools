@@ -67,3 +67,7 @@ class InputLayer(Layer):
     @Layer.output_shape.getter
     def output_shape(self):
         return self.shape
+
+    def manual_grad(self, grad):
+        updates = OrderedDict()
+        return updates, grad
